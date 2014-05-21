@@ -9,8 +9,9 @@ class Product
     @product = product_object
     @fulfillment_channel = nil
     @offer_listings_considered = nil
-    @lowest_price = nil
-    @lowest_price_currency = nil
+    @price = nil
+    @price_currency = nil
+    @local = nil
   end
 
   def retrieve_values
@@ -19,12 +20,22 @@ class Product
   end
 
   def sku_offers?
-    find_sku
     if !@product["Offers"].nil?
-    	@sku
+    	return_local
     else
     	false
     end
+  end
+
+  def return_local
+    find_sku
+    set_return_type
+  	get_lowest_offers "Offers"
+  	@sku
+  end
+
+  def set_return_type
+  	@local = true
   end
 
   def find_sku
@@ -33,9 +44,9 @@ class Product
 
   # LowestOfferListing always represents a new product in response
   # Qualifiers always represents a new offer within a LowestOfferListing
-  def get_lowest_offers
-  	if @product["LowestOfferListings"].respond_to?(:map)
-	    @product["LowestOfferListings"].map { |offer| offer_delegator(offer[1]) }
+  def get_lowest_offers key="LowestOfferListings"
+  	if @product["#{key}"].respond_to?(:map)
+	    @product["#{key}"].map { |offer| offer_delegator(offer[1]) }
 	  else
   		send_object
   	end
@@ -62,22 +73,27 @@ class Product
   end
 
   def find_fulfillment_channel
-    @fulfillment_channel = @offer["Qualifiers"]["FulfillmentChannel"]
+    @fulfillment_channel = @offer.has_key?("Qualifiers") ? @offer["Qualifiers"]["FulfillmentChannel"] : @offer["FulfillmentChannel"]
   end
 
   def offer_listings_considered
     @offer_listings_considered ||= 0
-    @offer_listings_considered += @offer["NumberOfOfferListingsConsidered"].to_i
+    @offer_listings_considered += @offer["NumberOfOfferListingsConsidered"].to_i || nil
   end
 
   def price
-    @lowest_price = @offer["Price"]["LandedPrice"]["Amount"].to_f
-    @lowest_price_currency = @offer["Price"]["LandedPrice"]["CurrencyCode"]
+  	base_key = @offer.has_key?("Price") ? "Price" : "BuyingPrice"
+    @price = @offer["#{base_key}"]["LandedPrice"]["Amount"].to_f
+    @price_currency = @offer["#{base_key}"]["LandedPrice"]["CurrencyCode"]
   end
 
   def send_object
 		@db = Database.new
-    @db.save @sku, stringify(@fulfillment_channel), @offer_listings_considered, @lowest_price, stringify(@lowest_price_currency)
+		if @local
+  		@db.save_local @sku, stringify(@fulfillment_channel), @price, stringify(@price_currency)
+  	else
+    	@db.save_competition @sku, stringify(@fulfillment_channel), @offer_listings_considered, @price, stringify(@price_currency)
+    end
   end
 
   def stringify field
