@@ -33,7 +33,7 @@ class Response
     node.each do |n| 
     	next if n.has_key?("Error")
       search = Product.new(n["Product"]) if n.has_key?("Product")
-      if @type == "check" 
+      if @type == "check"
         @results << search.sku_offers?
       else
         search.retrieve_values
